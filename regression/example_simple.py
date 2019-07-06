@@ -35,6 +35,7 @@ def do_kfolds(x, y):
     kfold = KFold(n_splits=10, shuffle=True, random_state=70)
     mses = []
     rsqs = []
+    varexps = []
     x = np.array(x)
     y = np.array(y)
     print("Preparing training and label data...OK")
@@ -74,13 +75,17 @@ def do_kfolds(x, y):
         stdev = np.std(y_test)
         var = stdev**2
         total_mse = var
-        rsq = (total_mse - mse) / total_mse
+        varexp = (total_mse - mse) / total_mse
+        corrval = np.corrcoef(y_test, y_pred)[0][1]
+        rsq = corrval**2
 
         mses.append(mse)
         rsqs.append(rsq)
+        varexps.append(varexp)
 
     print("MSE: %.3f (+/- %.3f)" % (np.mean(mses), np.std(mses)))
-    print("R-squared is %.3f (+/- %.3f)" % (np.mean(rsqs), np.std(rsqs)))
+    print("Variance explained is %.3f (+/- %.3f)" % (np.mean(varexp), np.std(varexp)))
+    print("R squared is %.3f (+/- %.3f)" % (np.mean(rsqs), np.std(rsqs)))
 
     return trained_M, mean, std
 
@@ -88,20 +93,20 @@ trained_M, mean, std = do_kfolds(x,y)
 
 # serialize model to JSON
 
-std_name = 'filtered_successpredratio_best1_std'
+std_name = 'filtered_successpredratio_14_std'
 path = "./saved_models/" + std_name + ".pickle"
 output = open(path, 'w+b')
 pickle.dump(std, output)
 output.close()
 
-mean_name = 'filtered_successpredratio_best1_mean'
+mean_name = 'filtered_successpredratio_14_mean'
 path = "./saved_models/" + mean_name + ".pickle"
 output = open(path, 'w+b')
 pickle.dump(mean, output)
 output.close()
 
 model_json = trained_M.to_json()
-model_name = 'filtered_successpredratio_best1_model'
+model_name = 'filtered_successpredratio_14_model'
 with open("./saved_models/" + model_name + ".json", "w") as json_file:
     json_file.write(model_json)
 # serialize weights to HDF5

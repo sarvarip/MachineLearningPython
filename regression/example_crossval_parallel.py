@@ -32,12 +32,14 @@ def get_performance_vals(y_test, y_pred):
     stdev = np.std(y_test)
     var = stdev**2
     total_mse = var
-    rsq = (total_mse - mse) / total_mse
+    varexp = (total_mse - mse) / total_mse
+    rsq = (np.corrcoef(y_test, y_pred)[0][1])**2
 
     print("MSE: %.3f" %mse)
+    print("Variance explained is %.3f" %varexp)
     print("R-squared is %.3f" %rsq)
 
-    return mse, rsq
+    return mse, rsq, varexp
 
 
 def do_kfolds(x, y, l):
@@ -125,10 +127,10 @@ def crossvalfunc(x, y, parameters, train, test):
     e_classify = time.time()
     print("Predicting data...OK, took: " + str((e_classify - s_classify)))
 
-    mse, rsq = get_performance_vals(y_test, y_pred)
+    mse, rsq, varexp = get_performance_vals(y_test, y_pred)
     print(list(zip(y_test,y_pred)))
 
-    return chosen_model, mean, std, mse, rsq
+    return chosen_model, mean, std, mse, rsq, varexp
 
 def main():
 
@@ -148,6 +150,7 @@ def main():
 
     mses = []
     rsqs = []
+    varexps = []
 
     train_indices= []
     test_indices= []
@@ -157,12 +160,14 @@ def main():
         test_indices.append(test_i)
 
     with concurrent.futures.ProcessPoolExecutor() as executor:
-        for chosen_model, mean, std, mse, rsq in executor.map(crossvalfunc, repeat(x), repeat(y), repeat(parameters), train_indices, test_indices):
+        for chosen_model, mean, std, mse, rsq, varexp in executor.map(crossvalfunc, repeat(x), repeat(y), repeat(parameters), train_indices, test_indices):
             mses.append(mse)
             rsqs.append(rsq)
+            varexps.append(varexp)
 
     print("Mean squared error is: %.3f (+/- %.3f)" % (np.mean(mses), np.std(mses)))
     print("R squared is %.3f (+/- %.3f)" % (np.mean(rsqs), np.std(rsqs)))
+    print("Variance explained is %.3f (+/- %.3f)" % (np.mean(varexps), np.std(varexps)))
 
     # serialize model to JSON
 
