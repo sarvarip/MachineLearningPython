@@ -7,14 +7,14 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score, mean_squared_error
 # from tqdm import tqdm_notebook
 
-# import keras
+import keras
 
-# from keras.models import Sequential
-# from keras.layers.core import Dense, Activation
-# from keras.layers import AlphaDropout
-# from keras import initializers
-# from keras.callbacks import EarlyStopping
-# from keras.optimizers import Adam
+from keras.models import Sequential
+from keras.layers.core import Dense, Activation
+from keras.layers import AlphaDropout
+from keras import initializers
+from keras.callbacks import EarlyStopping
+from keras.optimizers import Adam
 
 shops = pd.read_csv('shops.csv')
 test = pd.read_csv('test.csv')
@@ -512,7 +512,7 @@ matrix["rts_max"] = matrix["rts_max"].astype(np.int16)
 matrix["days"] = matrix["days"].astype(np.int8)
 # matrix["holidays"] = matrix["holidays"].astype(np.int8)
 
-matrix = matrix[matrix["date_block_num"] > 11]
+matrix = matrix[matrix["date_block_num"] > 1]
 matrix
 
 # %% [code]
@@ -543,7 +543,7 @@ ts = time.time()
 
 model = XGBRegressor(
     max_depth=10,
-    n_estimators=50,
+    n_estimators=100,
     min_child_weight=0.5, 
     colsample_bytree=0.8, 
     subsample=0.8, 
@@ -590,7 +590,7 @@ from catboost import CatBoostRegressor
 cb_model = CatBoostRegressor(
     random_seed=1,
     od_type='Iter',
-    iterations = 40,
+    iterations = 100,
     bootstrap_type='Bernoulli',
     max_ctr_complexity=1,
     eval_metric ='RMSE',
@@ -696,51 +696,51 @@ rmse = np.sqrt(mean_squared_error(pred_train.clip(0,20), Y_train))
 print('Train RMSE for linreg is %f' % rmse)
 
 # %% [code]
-# def build_sequential_model(input_rate, rate, shape):
-    # model = Sequential()
+def build_sequential_model(input_rate, rate, shape):
+    model = Sequential()
 
-    # model.add(AlphaDropout(input_rate, input_shape=(shape,)))
+    model.add(AlphaDropout(input_rate, input_shape=(shape,)))
 
-    # model.add(Dense(128, activation="linear", kernel_initializer="lecun_normal"))
-    # model.add(Activation('selu'))
-    # model.add(AlphaDropout(rate))
+    model.add(Dense(128, activation="linear", kernel_initializer="lecun_normal"))
+    model.add(Activation('selu'))
+    model.add(AlphaDropout(rate))
 
-    # model.add(Dense(64, activation="linear", kernel_initializer="lecun_normal"))
-    # model.add(Activation('selu'))
-    # model.add(AlphaDropout(rate))
+    model.add(Dense(64, activation="linear", kernel_initializer="lecun_normal"))
+    model.add(Activation('selu'))
+    model.add(AlphaDropout(rate))
 
-    # model.add(Dense(units=1, activation="linear", kernel_initializer="lecun_normal"))
+    model.add(Dense(units=1, activation="linear", kernel_initializer="lecun_normal"))
 
-    # optim = Adam(lr=0.01, beta_1=0.95)
+    optim = Adam(lr=0.01, beta_1=0.95)
 
-    # model.compile(loss='mean_squared_error',
-                    # optimizer=optim)
-    # return model
+    model.compile(loss='mean_squared_error',
+                    optimizer=optim)
+    return model
 
 
-# def fit_model_batch(model, x, y, num_epoch=None):
-    # if num_epoch is None:
-        # num_epoc = 30
-    #es = [EarlyStopping(monitor='loss', min_delta=0, patience=200, verbose=0, mode='auto')]
-    # model.fit(x, y, epochs=num_epoch, batch_size=x.shape[0], verbose = 0) #callbacks = es
-    # return model
-
-# %% [code]
-gc.collect()
-
-# %% [code]
-# M = build_sequential_model(0.2, 0.1, shape = X_train.shape[1])
-# trained_M = fit_model_batch(M, X_train, Y_train, num_epoch=30)
-# y_pred = trained_M.predict(X_test)
-# y_pred = np.array(y_pred)
-# y_pred = y_pred.ravel()
-# pred_nn = y_pred.clip(0,20)
+def fit_model_batch(model, x, y, num_epoch=None):
+    if num_epoch is None:
+        num_epoc = 30
+    es = [EarlyStopping(monitor='loss', min_delta=0, patience=200, verbose=0, mode='auto')]
+    model.fit(x, y, epochs=num_epoch, batch_size=x.shape[0], verbose = 0) #callbacks = es
+    return model
 
 # %% [code]
 gc.collect()
 
 # %% [code]
-X_test_level2 = np.c_[pred_lr, pred_gb, pred_cb]
+M = build_sequential_model(0.2, 0.1, shape = X_train.shape[1])
+trained_M = fit_model_batch(M, X_train, Y_train, num_epoch=30)
+y_pred = trained_M.predict(X_test)
+y_pred = np.array(y_pred)
+y_pred = y_pred.ravel()
+pred_nn = y_pred.clip(0,20)
+
+# %% [code]
+gc.collect()
+
+# %% [code]
+X_test_level2 = np.c_[pred_lr, pred_gb, pred_cb, pred_nn]
 
 # That is how we get target for the 2nd level dataset
 Y_train_level2 = matrix.loc[matrix['date_block_num'].isin([30, 31, 32, 33]), 'item_cnt_month']
@@ -748,7 +748,7 @@ Y_train_level2 = matrix.loc[matrix['date_block_num'].isin([30, 31, 32, 33]), 'it
 dates_train_level2 = dates_train[dates_train.isin([30, 31, 32, 33])]
 
 # And here we create 2nd level feeature matrix, init it with zeros first
-X_train_level2 = np.zeros([Y_train_level2.shape[0], 3])
+X_train_level2 = np.zeros([Y_train_level2.shape[0], 4])
 
 # Now fill `X_train_level2` with metafeatures
 for cur_block_num in [30, 31, 32, 33]:
@@ -773,9 +773,9 @@ for cur_block_num in [30, 31, 32, 33]:
     matrix["type"] = LabelEncoder().fit_transform( matrix.type )
     matrix["subtype"] = LabelEncoder().fit_transform( matrix.subtype )
     
-    X_train = matrix.loc[matrix['date_block_num'] < cur_block_num] # .drop(['item_cnt_month', 'date_block_num'], axis=1) #date_block_num is not useful
+    X_train = matrix.loc[matrix['date_block_num'] < cur_block_num].drop(['item_cnt_month'], axis=1)
     Y_train = matrix.loc[matrix['date_block_num'] < cur_block_num, 'item_cnt_month']
-    X_test = matrix.loc[matrix['date_block_num'] == cur_block_num] # .drop(['item_cnt_month', 'date_block_num'], axis=1)
+    X_test = matrix.loc[matrix['date_block_num'] == cur_block_num].drop(['item_cnt_month'], axis=1)
     
     #xgb
     
@@ -790,16 +790,25 @@ for cur_block_num in [30, 31, 32, 33]:
     #cb
     
     X_train.drop('date_block_num', axis=1, inplace=True)
+    X_test.drop('date_block_num', axis=1, inplace=True)
 
     cat_features = ['shop_id', 'item_id', 'category', 'city', 'item_category_id', 'name3', 'type', 'subtype', 'month', 'item_shop_first_sale', 'item_first_sale', 'shop_first_sale']
     num_features = [item for item in X_train.columns if item not in cat_features]
 
-    X_train[cat_features] = X_train[cat_features].astype(np.int16)
+    X_train[cat_features] = X_train[cat_features].astype(object)
+    X_train[num_features] = X_train[num_features].astype(np.float32)
+    Y_train = Y_train.astype(np.float32)
+    X_test[cat_features] = X_test[cat_features].astype(object)
+    X_test[num_features] = X_test[num_features].astype(np.float32)
     
     cb_model.fit(
     X_train, Y_train,
     verbose = True)
     pred_cb = cb_model.predict(X_test).clip(0,20)
+	
+    X_train = matrix.loc[matrix['date_block_num'] < cur_block_num] # .drop(['item_cnt_month', 'date_block_num'], axis=1) #date_block_num is not useful
+    Y_train = matrix.loc[matrix['date_block_num'] < cur_block_num, 'item_cnt_month']
+    X_test = matrix.loc[matrix['date_block_num'] == cur_block_num] # .drop(['item_cnt_month', 'date_block_num'], axis=1)
 
     # item, shop, city, subtype - no lag, global mean for NaN
     # shop-item, shop-subtype, item-city, subtype-city
@@ -866,10 +875,6 @@ for cur_block_num in [30, 31, 32, 33]:
     X_train.drop(['category', 'item_category_id', 'name3', 'type', 'date_block_num', 'item_cnt_month', 'shop_id', 'item_id', 'city', 'subtype', 'month', 'item_first_sale', 'item_shop_first_sale', 'shop_first_sale'], axis=1, inplace=True)
     X_test.drop(['category', 'item_category_id', 'name3', 'type', 'date_block_num', 'item_cnt_month', 'shop_id', 'item_id', 'city', 'subtype', 'month', 'item_first_sale', 'item_shop_first_sale', 'shop_first_sale'], axis=1, inplace=True)
     
-    X_train = matrix.loc[matrix['date_block_num'] < 34] # .drop(['item_cnt_month', 'date_block_num'], axis=1) #date_block_num is not useful
-    Y_train = matrix.loc[matrix['date_block_num'] < 34, 'item_cnt_month']
-    X_test = matrix.loc[matrix['date_block_num'] == 34] # .drop(['item_cnt_month', 'date_block_num'], axis=1)
-    
     #lr
     
     lr.fit(X_train.values, Y_train)
@@ -877,14 +882,14 @@ for cur_block_num in [30, 31, 32, 33]:
     
     #nn
     
-#     M = build_sequential_model(0.2, 0.1, shape = X_train.shape[1])
-#     trained_M = fit_model_batch(M, X_train, Y_train, num_epoch=30)
-#     y_pred = trained_M.predict(X_test)
-#     y_pred = np.array(y_pred)
-#     y_pred = y_pred.ravel()
-#     pred_nn = y_pred.clip(0,20)
+    M = build_sequential_model(0.2, 0.1, shape = X_train.shape[1])
+    trained_M = fit_model_batch(M, X_train, Y_train, num_epoch=30)
+    y_pred = trained_M.predict(X_test)
+    y_pred = np.array(y_pred)
+    y_pred = y_pred.ravel()
+    pred_nn = y_pred.clip(0,20)
     
-    X_train_level2[dates_train_level2 == cur_block_num] = np.c_[pred_lr, pred_gb, pred_cb]
+    X_train_level2[dates_train_level2 == cur_block_num] = np.c_[pred_lr, pred_gb, pred_cb, pred_nn]
     
     gc.collect()
 
@@ -903,7 +908,7 @@ submission = pd.DataFrame({
     "ID": test.index, 
     "item_cnt_month": Y_test
 })
-submission.to_csv('catboost_submission.csv', index=False)
+submission.to_csv('stack_nn_submission.csv', index=False)
 
 # save predictions for an ensemble
-pickle.dump(Y_test, open('catboost_test.pickle', 'wb'))
+# pickle.dump(Y_test, open('catboost_test.pickle', 'wb'))
